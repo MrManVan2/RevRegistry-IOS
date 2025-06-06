@@ -1,0 +1,355 @@
+// This is your Prisma schema file
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum VehicleStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+  SOLD
+  SCRAPPED
+}
+
+enum ExpenseType {
+  FUEL
+  MAINTENANCE
+  REPAIR
+  INSURANCE
+  REGISTRATION
+  SERVICE
+  OTHER
+}
+
+enum ExpenseCategory {
+  ROUTINE
+  EMERGENCY
+  UPGRADE
+  LEGAL
+  OTHER
+}
+
+enum FuelType {
+  REGULAR
+  PREMIUM
+  DIESEL
+  ELECTRIC
+  OTHER
+}
+
+model Account {
+  id                String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String  @db.ObjectId @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @db.String
+  access_token      String? @db.String
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.String
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  sessionToken String   @unique @map("session_token")
+  userId       String   @db.ObjectId @map("user_id")
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model User {
+  id             String       @id @default(auto()) @map("_id") @db.ObjectId
+  email          String       @unique
+  name           String?
+  image          String?
+  password       String?
+  emailVerified  DateTime?    @map("email_verified")
+  isActive       Boolean      @default(false) @map("is_active")
+  preferences    String?      @map("preferences")
+  twoFactorSecret String?     @map("two_factor_secret")
+  twoFactorEnabled Boolean    @default(false) @map("two_factor_enabled")
+  backupCodes    String[]     @default([]) @map("backup_codes")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  vehicles       Vehicle[]
+  expenses       Expense[]
+  maintenance    Maintenance[]
+  fuelEntries    FuelEntry[]
+  accounts       Account[]
+  sessions       Session[]
+  analyticsEvents AnalyticsEvent[]
+  pageViews      PageView[]
+  performanceMetrics PerformanceMetric[]
+  loginSessions  LoginSession[]
+  notificationReads NotificationRead[]
+
+  @@map("users")
+}
+
+model Vehicle {
+  id            String        @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String       @db.ObjectId @map("user_id")
+  make          String
+  model         String
+  year          Int
+  vin           String?
+  licensePlate  String?      @map("license_plate")
+  mileage       Int
+  notes         String?
+  status        VehicleStatus @default(ACTIVE)
+  imageUrl      String?      @map("image_url")
+  purchaseDate  DateTime?    @map("purchase_date")
+  purchasePrice Float?       @map("purchase_price")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expenses      Expense[]
+  maintenance   Maintenance[]
+  fuelEntries   FuelEntry[]
+
+  @@index([userId])
+  @@map("vehicles")
+}
+
+model Expense {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String    @db.ObjectId @map("user_id")
+  vehicleId   String    @db.ObjectId @map("vehicle_id")
+  date        DateTime
+  amount      Float
+  description String?
+  type        ExpenseType
+  category    ExpenseCategory
+  notes       String?
+  mileage     Int
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicle     Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  receipt     Receipt?
+
+  @@index([userId])
+  @@index([vehicleId])
+  @@map("expenses")
+}
+
+enum MaintenanceType {
+  OIL_CHANGE
+  TIRE_ROTATION
+  BRAKE_SERVICE
+  INSPECTION
+  FLUID_SERVICE
+  FILTER_CHANGE
+  BATTERY_SERVICE
+  TRANSMISSION_SERVICE
+  ENGINE_SERVICE
+  ELECTRICAL_SERVICE
+  AC_SERVICE
+  EXHAUST_SERVICE
+  SUSPENSION_SERVICE
+  WHEEL_ALIGNMENT
+  SCHEDULED_MAINTENANCE
+  REPAIR
+  RECALL
+  OTHER
+}
+
+enum MaintenanceStatus {
+  UPCOMING
+  DUE
+  OVERDUE
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+  CANCELLED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Maintenance {
+  id            String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String            @db.ObjectId @map("user_id")
+  vehicleId     String            @db.ObjectId @map("vehicle_id")
+  type          MaintenanceType
+  status        MaintenanceStatus @default(UPCOMING)
+  date          DateTime
+  mileage       Int
+  dueMileage    Int
+  description   String?
+  notes         String?
+  cost          Float?
+  priority      Priority          @default(MEDIUM)
+  dueDate       DateTime?
+  completedDate DateTime?
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicle       Vehicle           @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  parts         Part[]
+
+  @@index([userId])
+  @@index([vehicleId])
+  @@map("maintenances")
+}
+
+model Receipt {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  fileName  String   @map("file_name")
+  fileUrl   String   @map("file_url")
+  fileType  String   @map("file_type")
+  expense   Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  expenseId String   @unique @db.ObjectId @map("expense_id")
+
+  @@map("receipts")
+}
+
+model Part {
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  name          String
+  price         Float
+  quantity      Int
+  maintenance   Maintenance @relation(fields: [maintenanceId], references: [id], onDelete: Cascade)
+  maintenanceId String      @db.ObjectId @map("maintenance_id")
+
+  @@index([maintenanceId])
+  @@map("parts")
+}
+
+model VerificationToken {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verificationtokens")
+}
+
+model FuelEntry {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String    @db.ObjectId @map("user_id")
+  vehicleId   String    @db.ObjectId @map("vehicle_id")
+  date        DateTime
+  mileage     Int
+  volume      Float
+  cost        Float
+  fuelType    FuelType  @default(REGULAR)
+  location    String?
+  isTankFilled Boolean  @default(true) @map("is_tank_filled")
+  notes       String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicle     Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([vehicleId])
+  @@map("fuel_entries")
+}
+
+model AnalyticsEvent {
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String?   @db.ObjectId @map("user_id")
+  sessionId  String    @map("session_id")
+  event      String
+  properties String?   // JSON string of properties
+  timestamp  DateTime
+  createdAt  DateTime  @default(now()) @map("created_at")
+  user       User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([event])
+  @@index([timestamp])
+  @@map("analytics_events")
+}
+
+model PageView {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String?   @db.ObjectId @map("user_id")
+  sessionId String    @map("session_id")
+  page      String
+  title     String
+  referrer  String?
+  timestamp DateTime
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([page])
+  @@index([timestamp])
+  @@map("page_views")
+}
+
+model PerformanceMetric {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String?   @db.ObjectId @map("user_id")
+  sessionId String    @map("session_id")
+  metric    String
+  value     Float
+  timestamp DateTime
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([metric])
+  @@index([timestamp])
+  @@map("performance_metrics")
+}
+
+model LoginSession {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId @map("user_id")
+  ipAddress String   @map("ip_address")
+  userAgent String   @map("user_agent")
+  device    String?  // Parsed device info
+  browser   String?  // Parsed browser info
+  os        String?  // Parsed OS info
+  location  String?  // IP-based location
+  city      String?
+  country   String?
+  loginAt   DateTime @default(now()) @map("login_at")
+  logoutAt  DateTime? @map("logout_at")
+  isActive  Boolean  @default(true) @map("is_active")
+  sessionToken String? @map("session_token")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([loginAt])
+  @@index([isActive])
+  @@map("login_sessions")
+}
+
+model NotificationRead {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId         String   @db.ObjectId @map("user_id")
+  notificationId String   @map("notification_id")
+  readAt         DateTime @default(now()) @map("read_at")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, notificationId])
+  @@index([userId])
+  @@map("notification_reads")
+}
