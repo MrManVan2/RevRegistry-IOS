@@ -9,7 +9,7 @@ struct LoginView: View {
     @State private var showingAlert = false
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 30) {
                 // Logo and Title
                 VStack(spacing: 16) {
@@ -153,6 +153,12 @@ struct LoginView: View {
                 .padding(.bottom, 30)
             }
             .navigationBarHidden(true)
+            .navigationDestination(isPresented: $authService.isAwaitingVerification) {
+                if let email = authService.registrationEmail {
+                    EmailVerificationView(email: email)
+                        .environmentObject(authService)
+                }
+            }
         }
         .alert("Feature Coming Soon", isPresented: $showingAlert) {
             Button("OK") { }

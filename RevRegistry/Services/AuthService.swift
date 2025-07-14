@@ -6,6 +6,8 @@ class AuthService: ObservableObject {
     @Published var currentUser: User?
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var registrationEmail: String?
+    @Published var isAwaitingVerification = false
     
     private let apiClient = APIClient.shared
     private var cancellables = Set<AnyCancellable>()
@@ -37,9 +39,25 @@ class AuthService: ObservableObject {
             }
             
         } catch {
-            await MainActor.run {
-                self.errorMessage = error.localizedDescription
-                self.isLoading = false
+            // Handle email not verified error specially
+            if let apiError = error as? APIError,
+               case .serverError(let statusCode, let data) = apiError,
+               statusCode == 401,
+               let errorData = data,
+               let errorString = String(data: errorData, encoding: .utf8),
+               errorString.contains("EMAIL_NOT_VERIFIED") {
+                
+                await MainActor.run {
+                    self.registrationEmail = email
+                    self.isAwaitingVerification = true
+                    self.errorMessage = "Please verify your email address to continue"
+                    self.isLoading = false
+                }
+            } else {
+                await MainActor.run {
+                    self.errorMessage = error.localizedDescription
+                    self.isLoading = false
+                }
             }
         }
     }
@@ -52,7 +70,31 @@ class AuthService: ObservableObject {
         
         do {
             let registerRequest = RegisterRequest(email: email, password: password, name: name)
-            let response: LoginResponse = try await apiClient.post("/auth/register", body: registerRequest)
+            let response: RegisterResponse = try await apiClient.post("/auth/register", body: registerRequest)
+            
+            await MainActor.run {
+                self.registrationEmail = email
+                self.isAwaitingVerification = true
+                self.isLoading = false
+            }
+            
+        } catch {
+            await MainActor.run {
+                self.errorMessage = error.localizedDescription
+                self.isLoading = false
+            }
+        }
+    }
+    
+    func verifyEmail(email: String, verificationCode: String) async {
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+        }
+        
+        do {
+            let verifyRequest = VerifyEmailRequest(email: email, verificationCode: verificationCode)
+            let response: VerifyEmailResponse = try await apiClient.post("/auth/verify-email", body: verifyRequest)
             
             // Save auth data
             KeychainHelper.saveToken(response.token)
@@ -61,7 +103,32 @@ class AuthService: ObservableObject {
             await MainActor.run {
                 self.currentUser = response.user
                 self.isAuthenticated = true
+                self.isAwaitingVerification = false
+                self.registrationEmail = nil
                 self.isLoading = false
+            }
+            
+        } catch {
+            await MainActor.run {
+                self.errorMessage = error.localizedDescription
+                self.isLoading = false
+            }
+        }
+    }
+    
+    func resendVerificationCode(email: String) async {
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+        }
+        
+        do {
+            let resendRequest = ResendVerificationRequest(email: email)
+            let response: ResendVerificationResponse = try await apiClient.post("/auth/resend-verification", body: resendRequest)
+            
+            await MainActor.run {
+                self.isLoading = false
+                // Show success message or handle response
             }
             
         } catch {
@@ -133,5 +200,10 @@ class AuthService: ObservableObject {
     
     func clearError() {
         errorMessage = nil
+    }
+    
+    func clearVerificationState() {
+        isAwaitingVerification = false
+        registrationEmail = nil
     }
 } 

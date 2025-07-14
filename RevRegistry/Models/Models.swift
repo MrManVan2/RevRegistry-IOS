@@ -383,6 +383,32 @@ struct RegisterRequest: Codable {
     let name: String
 }
 
+// MARK: - Email Verification Models
+struct RegisterResponse: Codable {
+    let message: String
+    let email: String
+    let requiresVerification: Bool
+}
+
+struct VerifyEmailRequest: Codable {
+    let email: String
+    let verificationCode: String
+}
+
+struct VerifyEmailResponse: Codable {
+    let user: User
+    let token: String
+    let message: String
+}
+
+struct ResendVerificationRequest: Codable {
+    let email: String
+}
+
+struct ResendVerificationResponse: Codable {
+    let message: String
+}
+
 // MARK: - Business Logic Models
 struct ExpenseAnalysis: Codable {
     let totalByCategory: [String: Double]
