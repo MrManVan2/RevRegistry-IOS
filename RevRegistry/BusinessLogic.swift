@@ -18,8 +18,11 @@ class VehicleBusinessLogic {
         // Calculate time-based depreciation
         let timeDepreciation = purchasePrice * (1 - pow(1 - standardDepreciation, Double(yearsOwned)))
         
-        // Calculate mileage-based depreciation (assuming initial mileage was 0 for simplicity)
-        let mileageDepreciation = Double(vehicle.mileage) * 0.10 // $0.10 per mile
+        // Calculate mileage-based depreciation based on miles driven since purchase
+        // Assume average annual mileage of 12,000 miles when purchased
+        let assumedPurchaseMileage = Double(vehicle.year <= 2020 ? (2024 - vehicle.year) * 12000 : 0)
+        let estimatedMilesDriven = max(0, Double(vehicle.mileage) - assumedPurchaseMileage)
+        let mileageDepreciation = estimatedMilesDriven * 0.10 // $0.10 per mile driven since purchase
         
         return timeDepreciation + mileageDepreciation
     }
