@@ -96,8 +96,9 @@ class ExpenseService: ObservableObject {
         let expense: Expense = try await apiClient.post("/expenses", body: expenseData)
         
         await MainActor.run {
-            self.expenses.append(expense)
-            self.expenses.sort { $0.date > $1.date } // Sort by date descending
+            // Insert expense in correct position to maintain sorted order (date descending)
+            let insertIndex = self.expenses.firstIndex { $0.date <= expense.date } ?? self.expenses.count
+            self.expenses.insert(expense, at: insertIndex)
         }
         
         return expense
@@ -129,7 +130,10 @@ class ExpenseService: ObservableObject {
         
         await MainActor.run {
             if let index = self.expenses.firstIndex(where: { $0.id == id }) {
-                self.expenses[index] = expense
+                self.expenses.remove(at: index)
+                // Insert updated expense in correct position to maintain sorted order
+                let insertIndex = self.expenses.firstIndex { $0.date <= expense.date } ?? self.expenses.count
+                self.expenses.insert(expense, at: insertIndex)
             }
             if self.selectedExpense?.id == id {
                 self.selectedExpense = expense
