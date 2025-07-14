@@ -79,25 +79,100 @@ struct VehicleDetailView: View {
 
 struct VehicleHeaderView: View {
     let vehicle: Vehicle
+    @StateObject private var cameraService = CameraService()
+    @StateObject private var vehicleService = VehicleService()
+    
+    @State private var showingImageOptions = false
+    @State private var showingImagePicker = false
+    @State private var sourceType: UIImagePickerController.SourceType = .camera
+    @State private var selectedImage: UIImage?
+    @State private var showingAlert = false
+    @State private var alertMessage = ""
     
     var body: some View {
         HStack(spacing: 16) {
             // Vehicle Image
-            AsyncImage(url: URL(string: vehicle.imageUrl ?? "")) { image in
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } placeholder: {
-                Rectangle()
-                    .fill(Color(.systemGray5))
-                    .overlay(
-                        Image(systemName: "car.fill")
-                            .foregroundColor(.secondary)
-                            .font(.largeTitle)
-                    )
+            Button(action: {
+                showingImageOptions = true
+            }) {
+                Group {
+                    if let selectedImage = selectedImage {
+                        Image(uiImage: selectedImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } else {
+                        AsyncImage(url: URL(string: vehicle.imageUrl ?? "")) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Rectangle()
+                                .fill(Color(.systemGray5))
+                                .overlay(
+                                    VStack {
+                                        Image(systemName: selectedImage == nil && vehicle.imageUrl == nil ? "camera.fill" : "car.fill")
+                                            .foregroundColor(.secondary)
+                                            .font(.largeTitle)
+                                        if selectedImage == nil && vehicle.imageUrl == nil {
+                                            Text("Add Photo")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                    }
+                                )
+                        }
+                    }
+                }
+                .overlay(
+                    // Camera overlay icon
+                    Image(systemName: "camera.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.white)
+                        .background(Color.black.opacity(0.6))
+                        .clipShape(Circle())
+                        .padding(4),
+                    alignment: .topTrailing
+                )
             }
             .frame(width: 120, height: 80)
             .clipShape(RoundedRectangle(cornerRadius: 12))
+            .confirmationDialog("Vehicle Photo", isPresented: $showingImageOptions) {
+                if CameraService.isCameraAvailable() {
+                    Button("Take Photo") {
+                        sourceType = .camera
+                        showingImagePicker = true
+                    }
+                }
+                
+                if CameraService.isPhotoLibraryAvailable() {
+                    Button("Choose from Library") {
+                        sourceType = .photoLibrary
+                        showingImagePicker = true
+                    }
+                }
+                
+                Button("Cancel", role: .cancel) { }
+            }
+            .sheet(isPresented: $showingImagePicker) {
+                ImagePicker(selectedImage: $selectedImage, isPresented: $showingImagePicker, sourceType: sourceType)
+            }
+            .alert("Error", isPresented: $showingAlert) {
+                Button("OK") { }
+            } message: {
+                Text(alertMessage)
+            }
+            .onChange(of: selectedImage) { image in
+                if let image = image {
+                    uploadVehicleImage(image)
+                }
+            }
+            .onChange(of: cameraService.errorMessage) { error in
+                if let error = error {
+                    alertMessage = error
+                    showingAlert = true
+                    cameraService.clearError()
+                }
+            }
             
             VStack(alignment: .leading, spacing: 8) {
                 Text("\(vehicle.year) \(vehicle.make) \(vehicle.model)")
@@ -122,6 +197,12 @@ struct VehicleHeaderView: View {
         .padding()
         .background(Color(.systemGray6))
         .cornerRadius(12)
+    }
+    
+    private func uploadVehicleImage(_ image: UIImage) {
+        Task {
+            await cameraService.uploadVehicleImage(image, vehicleId: vehicle.id, vehicleService: vehicleService)
+        }
     }
 }
 
