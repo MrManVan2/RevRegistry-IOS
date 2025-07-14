@@ -272,6 +272,13 @@ struct AddExpenseView: View {
     @State private var showingAlert = false
     @State private var alertMessage = ""
     
+    // Camera-related state
+    @StateObject private var cameraService = CameraService()
+    @State private var showingReceiptOptions = false
+    @State private var showingImagePicker = false
+    @State private var sourceType: UIImagePickerController.SourceType = .camera
+    @State private var selectedReceiptImage: UIImage?
+    
     var body: some View {
         NavigationView {
             Form {
@@ -313,6 +320,49 @@ struct AddExpenseView: View {
                 Section("Notes") {
                     TextField("Additional notes (Optional)", text: $notes, axis: .vertical)
                         .lineLimit(3...6)
+                }
+                
+                Section("Receipt") {
+                    Button(action: {
+                        showingReceiptOptions = true
+                    }) {
+                        HStack {
+                            Image(systemName: selectedReceiptImage != nil ? "photo.fill" : "camera.fill")
+                                .foregroundColor(selectedReceiptImage != nil ? .green : .blue)
+                            
+                            Text(selectedReceiptImage != nil ? "Receipt Added" : "Add Receipt Photo")
+                                .foregroundColor(.primary)
+                            
+                            Spacer()
+                            
+                            if selectedReceiptImage != nil {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                            } else {
+                                Image(systemName: "chevron.right")
+                                    .foregroundColor(.secondary)
+                                    .font(.caption)
+                            }
+                        }
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    
+                    if let receiptImage = selectedReceiptImage {
+                        HStack {
+                            Image(uiImage: receiptImage)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(height: 100)
+                                .cornerRadius(8)
+                            
+                            Spacer()
+                            
+                            Button("Remove") {
+                                selectedReceiptImage = nil
+                            }
+                            .foregroundColor(.red)
+                        }
+                    }
                 }
                 
                 if !description.isEmpty && Double(amount) != nil {
@@ -368,6 +418,33 @@ struct AddExpenseView: View {
                     mileage = String(vehicle.mileage)
                 }
             }
+            .confirmationDialog("Add Receipt", isPresented: $showingReceiptOptions) {
+                if CameraService.isCameraAvailable() {
+                    Button("Take Photo") {
+                        sourceType = .camera
+                        showingImagePicker = true
+                    }
+                }
+                
+                if CameraService.isPhotoLibraryAvailable() {
+                    Button("Choose from Library") {
+                        sourceType = .photoLibrary
+                        showingImagePicker = true
+                    }
+                }
+                
+                Button("Cancel", role: .cancel) { }
+            }
+            .sheet(isPresented: $showingImagePicker) {
+                ImagePicker(selectedImage: $selectedReceiptImage, isPresented: $showingImagePicker, sourceType: sourceType)
+            }
+            .onChange(of: cameraService.errorMessage) { error in
+                if let error = error {
+                    alertMessage = error
+                    showingAlert = true
+                    cameraService.clearError()
+                }
+            }
         }
     }
     
@@ -387,7 +464,7 @@ struct AddExpenseView: View {
         
         Task {
             do {
-                _ = try await expenseService.createExpense(
+                let expense = try await expenseService.createExpense(
                     vehicleId: vehicle.id,
                     date: date,
                     amount: amountDouble,
@@ -397,6 +474,11 @@ struct AddExpenseView: View {
                     notes: notes.isEmpty ? nil : notes,
                     mileage: mileageInt
                 )
+                
+                // Upload receipt if one was selected
+                if let receiptImage = selectedReceiptImage {
+                    await cameraService.uploadReceiptImage(receiptImage, expenseId: expense.id, expenseService: expenseService)
+                }
                 
                 dismiss()
             } catch {
